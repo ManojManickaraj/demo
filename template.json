@@ -1,0 +1,147 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workflows_LA_CSVtoHTML_name": {
+            "type": "String"
+        },
+        "connections_azureblob_externalid": {
+            "defaultValue": "/subscriptions/225be0b6-6988-4b65-8268-8fec4d0ff5f2/resourceGroups/EIIM-Logic_App/providers/Microsoft.Web/connections/azureblob",
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('workflows_LA_CSVtoHTML_name')]",
+            "location": "eastus",
+            "properties": {
+                "state": "Disabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "manual": {
+                            "type": "Request",
+                            "kind": "Http",
+                            "inputs": {
+                                "schema": {
+                                    "items": {
+                                        "properties": {
+                                            "cardholder": {
+                                                "type": "string"
+                                            },
+                                            "cardnumber": {
+                                                "type": "string"
+                                            },
+                                            "cvv": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "required": [
+                                            "cardholder",
+                                            "cardnumber",
+                                            "cvv"
+                                        ],
+                                        "type": "object"
+                                    },
+                                    "type": "array"
+                                }
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Create_CSV_table": {
+                            "runAfter": {},
+                            "type": "Table",
+                            "inputs": {
+                                "format": "CSV",
+                                "from": "@triggerBody()"
+                            }
+                        },
+                        "Create_HTML_table": {
+                            "runAfter": {
+                                "Create_CSV_table": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Table",
+                            "inputs": {
+                                "format": "HTML",
+                                "from": "@triggerBody()"
+                            }
+                        },
+                        "Create_blob_(V2)": {
+                            "runAfter": {
+                                "Initialize_variable": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "body": "@variables('css')",
+                                "headers": {
+                                    "ReadFileMetadataFromServer": true
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azureblob']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('AccountNameFromSettings'))}/files",
+                                "queries": {
+                                    "folderPath": "/demo",
+                                    "name": "html.html",
+                                    "queryParametersSingleEncoded": true
+                                }
+                            },
+                            "runtimeConfiguration": {
+                                "contentTransfer": {
+                                    "transferMode": "Chunked"
+                                }
+                            }
+                        },
+                        "Initialize_variable": {
+                            "runAfter": {
+                                "Create_HTML_table": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "css",
+                                        "type": "string",
+                                        "value": "<style>\n#testID table th {color:blue; background-color:yellow}, td, table,table {border: 1px solid red}\n</style>\n<div id=\"testID\">\n@{body('Create_HTML_table')}\n</div>"
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azureblob": {
+                                "connectionId": "[parameters('connections_azureblob_externalid')]",
+                                "connectionName": "azureblob",
+                                "id": "/subscriptions/225be0b6-6988-4b65-8268-8fec4d0ff5f2/providers/Microsoft.Web/locations/eastus/managedApis/azureblob"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}
